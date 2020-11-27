@@ -27,6 +27,7 @@ from lib.ohem_ce_loss import OhemCELoss
 from lib.lr_scheduler import WarmupPolyLrScheduler
 from lib.meters import TimeMeter, AvgMeter
 from lib.logger import setup_logger, print_log_msg
+from lib.datasets import coco
 
 # apex
 has_apex = True
@@ -118,13 +119,13 @@ def set_meters():
 def train():
     logger = logging.getLogger()
 
-    is_dist = False
-
     ## dataset
-    dl = get_data_loader(
+    dl = coco.get_dataset(batch_size=4, mode='valid')
+
+    test_set = get_data_loader(
             cfg.im_root, cfg.train_im_anns,
-            cfg.ims_per_gpu, cfg.scales, cfg.cropsize,
-            cfg.max_iter, mode='train', distributed=is_dist)
+            1, cfg.scales, cfg.cropsize,
+            cfg.max_iter, mode='test', distributed=False)
 
     ## model
     net, criteria_pre, criteria_aux = set_model()
@@ -145,47 +146,55 @@ def train():
         max_iter=cfg.max_iter, warmup_iter=cfg.warmup_iters,
         warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
 
-    for i in range(cfg.n_epochs):
-        ## train loop
-        for it, (im, lb) in enumerate(dl):
-            im = im.cuda()
-            lb = lb.cuda()
+    ## train loop
+    for it, (im, lb) in enumerate(dl):
+        im = im.cuda()
+        lb = lb.cuda()
 
-            lb = torch.squeeze(lb, 1)
+        optim.zero_grad()
+        logits, *logits_aux = net(im)
+        loss_pre = criteria_pre(logits, lb)
+        loss_aux = [crit(lgt, lb) for crit, lgt in zip(criteria_aux, logits_aux)]
+        loss = loss_pre + sum(loss_aux)
+        if has_apex:
+            with amp.scale_loss(loss, optim) as scaled_loss:
+                scaled_loss.backward()
+        else:
+            loss.backward()
+        optim.step()
+        torch.cuda.synchronize()
+        lr_schdr.step()
 
-            optim.zero_grad()
-            logits, *logits_aux = net(im)
-            loss_pre = criteria_pre(logits, lb)
-            loss_aux = [crit(lgt, lb) for crit, lgt in zip(criteria_aux, logits_aux)]
-            loss = loss_pre + sum(loss_aux)
-            if has_apex:
-                with amp.scale_loss(loss, optim) as scaled_loss:
-                    scaled_loss.backward()
-            else:
-                loss.backward()
-            optim.step()
-            torch.cuda.synchronize()
-            lr_schdr.step()
-
-            time_meter.update()
-            loss_meter.update(loss.item())
-            loss_pre_meter.update(loss_pre.item())
-            _ = [mter.update(lss.item()) for mter, lss in zip(loss_aux_meters, loss_aux)]
+        time_meter.update()
+        loss_meter.update(loss.item())
+        loss_pre_meter.update(loss_pre.item())
+        _ = [mter.update(lss.item()) for mter, lss in zip(loss_aux_meters, loss_aux)]
 
         ## print training log message
-        if (i + 1) % 1 == 0:
+        if (it + 1) % 10 == 0:
+
             lr = lr_schdr.get_lr()
             lr = sum(lr) / len(lr)
             print_log_msg(
                 it, cfg.max_iter, lr, time_meter, loss_meter,
                 loss_pre_meter, loss_aux_meters)
+            
+            sample_in, sample_out = next(itertools.islice(test_set, 3, None))
+
+            test_in = sample_in.reshape(cfg.cropsize[0], cfg.cropsize[1], 3).numpy()
+            test_in = ((test_in - test_in.min()) * (1/(test_in.max() - test_in.min()) * 255)).astype('uint8')
+            plt.imshow(test_in)
+            plt.show()
+
+            sample_out = sample_out.reshape(cfg.cropsize[0], cfg.cropsize[1], 1).numpy()
+            sample_out = ((sample_out - sample_out.min()) * (1/(sample_out.max() - sample_out.min()) * 255)).astype('uint8')
+            plt.imshow(sample_out)
+            plt.show()
 
     ## dump the final model and evaluate the result
     save_pth = osp.join(cfg.respth, 'model_final.pth')
     logger.info('\nsave models to {}'.format(save_pth))
-    state = net.state_dict()
-
-    torch.save(state, save_pth)
+    state = net.module.state_dict()
 
     logger.info('\nevaluating the final model')
     torch.cuda.empty_cache()

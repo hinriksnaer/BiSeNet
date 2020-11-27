@@ -102,7 +102,7 @@ class AttentionRefinementModule(nn.Module):
         self.init_weight()
 
     def forward(self, x):
-        feat = self.conv(x)
+        feat = self.conv(x) # why this
         atten = torch.mean(feat, dim=(2, 3), keepdim=True)
         atten = self.conv_atten(atten)
         atten = self.bn_atten(atten)
@@ -145,7 +145,7 @@ class ContextPath(nn.Module):
         feat16_arm = self.arm16(feat16)
         feat16_sum = feat16_arm + feat32_up
         feat16_up = self.up16(feat16_sum)
-        feat16_up = self.conv_head16(feat16_up)
+        feat16_up = self.conv_head16(feat16_up) # why this
 
         return feat16_up, feat32_up # x8, x16
 
@@ -173,7 +173,7 @@ class SpatialPath(nn.Module):
         self.conv1 = ConvBNReLU(3, 64, ks=7, stride=2, padding=3)
         self.conv2 = ConvBNReLU(64, 64, ks=3, stride=2, padding=1)
         self.conv3 = ConvBNReLU(64, 64, ks=3, stride=2, padding=1)
-        self.conv_out = ConvBNReLU(64, 128, ks=1, stride=1, padding=0)
+        self.conv_out = ConvBNReLU(64, 128, ks=1, stride=1, padding=0) # why this
         self.init_weight()
 
     def forward(self, x):
@@ -270,8 +270,8 @@ class BiSeNetV1(nn.Module):
         feat_cp8, feat_cp16 = self.cp(x)
         feat_sp = self.sp(x)
         feat_fuse = self.ffm(feat_sp, feat_cp8)
-
-        feat_out = self.conv_out(feat_fuse)
+        
+        feat_out = self.conv_out(feat_fuse) # why this
         if self.output_aux:
             feat_out16 = self.conv_out16(feat_cp8)
             feat_out32 = self.conv_out32(feat_cp16)

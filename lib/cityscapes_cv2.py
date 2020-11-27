@@ -86,6 +86,12 @@ def get_data_loader(datapth, annpath, ims_per_gpu, scales, cropsize, max_iter=No
         shuffle = False
         drop_last = False
 
+    elif mode == 'test':
+        trans_func = TransformationTrain(scales, cropsize)
+        batchsize = ims_per_gpu
+        shuffle = False
+        drop_last = False
+
     ds = CityScapes(datapth, annpath, trans_func=trans_func, mode=mode)
 
     if distributed:

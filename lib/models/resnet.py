@@ -71,10 +71,14 @@ class Resnet18(nn.Module):
         self.init_weight()
 
     def forward(self, x):
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
-        x = self.maxpool(x)
+        xy = self.conv1(x)
+        del x
+        x = self.bn1(xy)
+        del xy
+        xy = self.relu(x)
+        del x
+        x = self.maxpool(xy)
+        del xy
 
         x = self.layer1(x)
         feat8 = self.layer2(x) # 1/8
