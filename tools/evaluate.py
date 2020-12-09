@@ -187,7 +187,7 @@ class MscEvalCrop(object):
 def eval_model(net, ims_per_gpu, im_root, im_anns):
     is_dist = dist.is_initialized()
     dl = get_data_loader(im_root, im_anns, ims_per_gpu, None,
-            None, mode='val', distributed=is_dist)
+            None, mode='test', distributed=is_dist)
     net.eval()
 
     heads, mious = [], []
@@ -241,24 +241,13 @@ def evaluate(cfg, weight_pth):
     net.load_state_dict(torch.load(weight_pth))
     net.cuda()
 
-    is_dist = dist.is_initialized()
-    if is_dist:
-        local_rank = dist.get_rank()
-        net = nn.parallel.DistributedDataParallel(
-            net,
-            device_ids=[local_rank, ],
-            output_device=local_rank
-        )
-
     ## evaluator
-    heads, mious = eval_model(net, 2, cfg.im_root, cfg.val_im_anns)
+    heads, mious = eval_model(net, 2, cfg.im_root, cfg.test_im_anns)
     logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
 
 
 def parse_args():
     parse = argparse.ArgumentParser()
-    parse.add_argument('--local_rank', dest='local_rank',
-                       type=int, default=-1,)
     parse.add_argument('--weight-path', dest='weight_pth', type=str,
                        default='model_final.pth',)
     parse.add_argument('--port', dest='port', type=int, default=44553,)
@@ -269,13 +258,7 @@ def parse_args():
 def main():
     args = parse_args()
     cfg = cfg_factory[args.model]
-    if not args.local_rank == -1:
-        torch.cuda.set_device(args.local_rank)
-        dist.init_process_group(backend='nccl',
-        init_method='tcp://127.0.0.1:{}'.format(args.port),
-        world_size=torch.cuda.device_count(),
-        rank=args.local_rank
-    )
+
     if not osp.exists(cfg.respth): os.makedirs(cfg.respth)
     setup_logger('{}-eval'.format(cfg.model_type), cfg.respth)
     evaluate(cfg, args.weight_pth)

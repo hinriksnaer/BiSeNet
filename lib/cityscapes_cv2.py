@@ -80,13 +80,13 @@ def get_data_loader(datapth, annpath, ims_per_gpu, scales, cropsize, max_iter=No
         batchsize = ims_per_gpu
         shuffle = True
         drop_last = True
-    elif mode == 'val':
+    elif mode == 'test':
         trans_func = TransformationVal()
         batchsize = ims_per_gpu
         shuffle = False
         drop_last = False
 
-    elif mode == 'test':
+    elif mode == 'val':
         trans_func = TransformationTrain(scales, cropsize)
         batchsize = ims_per_gpu
         shuffle = False

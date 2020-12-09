@@ -13,6 +13,7 @@ import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 from tabulate import tabulate
+from barbar import Bar
 
 import torch
 import torch.nn as nn
@@ -50,7 +51,7 @@ def parse_args():
     parse = argparse.ArgumentParser()
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=44554,)
-    parse.add_argument('--model', dest='model', type=str, default='bisenetv2',)
+    parse.add_argument('--model', dest='model', type=str, default='bisenetv1',)
     parse.add_argument('--finetune-from', type=str, default=None,)
     return parse.parse_args()
 
@@ -126,6 +127,12 @@ def train():
             cfg.ims_per_gpu, cfg.scales, cfg.cropsize,
             cfg.max_iter, mode='train', distributed=is_dist)
 
+    valid = get_data_loader(
+        cfg.im_root, cfg.val_im_anns,
+            cfg.ims_per_gpu, cfg.scales, cfg.cropsize,
+            cfg.max_iter, mode='val', distributed=is_dist
+    )
+
     ## model
     net, criteria_pre, criteria_aux = set_model()
 
@@ -145,9 +152,14 @@ def train():
         max_iter=cfg.max_iter, warmup_iter=cfg.warmup_iters,
         warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
 
+    best_validation = np.inf
+
     for i in range(cfg.n_epochs):
         ## train loop
-        for it, (im, lb) in enumerate(dl):
+        for it, (im, lb) in enumerate(Bar(dl)):
+
+            net.train()
+
             im = im.cuda()
             lb = lb.cuda()
 
@@ -171,14 +183,50 @@ def train():
             loss_meter.update(loss.item())
             loss_pre_meter.update(loss_pre.item())
             _ = [mter.update(lss.item()) for mter, lss in zip(loss_aux_meters, loss_aux)]
-
+            
+            del im
+            del lb
         ## print training log message
-        if (i + 1) % 1 == 0:
-            lr = lr_schdr.get_lr()
-            lr = sum(lr) / len(lr)
-            print_log_msg(
-                it, cfg.max_iter, lr, time_meter, loss_meter,
-                loss_pre_meter, loss_aux_meters)
+        lr = lr_schdr.get_lr()
+        lr = sum(lr) / len(lr)
+        print_log_msg(
+            it, cfg.max_iter, lr, time_meter, loss_meter,
+            loss_pre_meter, loss_aux_meters)
+
+        ##validation loop
+        validation_loss = []
+        for it, (im, lb) in enumerate(Bar(valid)):
+
+            net.eval()
+
+            im = im.cuda()
+            lb = lb.cuda()
+
+            lb = torch.squeeze(lb, 1)
+
+            with torch.no_grad():
+                logits, *logits_aux = net(im)
+                loss_pre = criteria_pre(logits, lb)
+                loss_aux = [crit(lgt, lb) for crit, lgt in zip(criteria_aux, logits_aux)]
+                loss = loss_pre + sum(loss_aux)
+                validation_loss.append(loss.item())
+
+            del im
+            del lb
+
+        ## print training log messag
+        validation_loss = sum(validation_loss)/len(validation_loss)
+        print(f'Validation loss: {validation_loss}')
+
+        if best_validation > validation_loss:
+            print('new best performance, storing model')
+            best_validation = validation_loss
+            state = net.state_dict()
+            torch.save(state,  osp.join(cfg.respth, 'best_validation.pth'))
+
+
+
+
 
     ## dump the final model and evaluate the result
     save_pth = osp.join(cfg.respth, 'model_final.pth')
@@ -189,7 +237,7 @@ def train():
 
     logger.info('\nevaluating the final model')
     torch.cuda.empty_cache()
-    heads, mious = eval_model(net, 2, cfg.im_root, cfg.val_im_anns)
+    heads, mious = eval_model(net, 2, cfg.im_root, cfg.test_im_anns)
     logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
 
     return
