@@ -1,0 +1,56 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "run test hardnet",
+            "type": "python",
+            "request": "launch",
+            "program": "./tools/train_test.py",
+            "console": "integratedTerminal",
+            "args": ["--model", "hardnet"]
+        },
+        {
+            "name": "run test bisenet",
+            "type": "python",
+            "request": "launch",
+            "program": "./tools/train_test.py",
+            "console": "integratedTerminal",
+            "args": ["--model", "bisenetv1"]
+        },
+        {
+            "name": "eval test bisenet",
+            "type": "python",
+            "request": "launch",
+            "program": "./tools/evaluate.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--weight-path",
+                "./stored_models/model_final_v1.pth"
+            ]
+        },
+        {
+            "name": "eval test hardnet",
+            "type": "python",
+            "request": "launch",
+            "program": "./tools/evaluate.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--weight-path",
+                "./res/cityscapes/best_validation.pth",
+                "--model",
+                "hardnet"
+            ]
+        },
+        {
+            "name": "Base dataset",
+            "type": "python",
+            "request": "launch",
+            "program": "./lib/cityscapes_cv2.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

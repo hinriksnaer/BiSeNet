@@ -73,6 +73,23 @@ class CityScapes(BaseDataset):
             std=(0.2112, 0.2148, 0.2115),
         )
 
+class RGB_Fillet(BaseDataset):
+    def __init__(self, dataroot, annpath, trans_func=None, mode='train'):
+        super(RGB_Fillet, self).__init__(
+                dataroot, annpath, trans_func, mode)
+        self.n_cats = 6
+        self.lb_ignore = 255
+        '''
+        self.lb_map = np.arange(256).astype(np.uint8)
+
+        for el in labels_info:
+            self.lb_map[el['id']] = el['trainId']
+        '''
+
+        self.to_tensor = T.ToTensor(
+            mean=(0.3257, 0.3690, 0.3223), # city, rgb
+            std=(0.2112, 0.2148, 0.2115),
+        )
 
 def get_data_loader(datapth, annpath, ims_per_gpu, scales, cropsize, max_iter=None, mode='train', distributed=True):
     if mode == 'train':
@@ -94,33 +111,14 @@ def get_data_loader(datapth, annpath, ims_per_gpu, scales, cropsize, max_iter=No
 
     ds = CityScapes(datapth, annpath, trans_func=trans_func, mode=mode)
 
-    if distributed:
-        assert dist.is_available(), "dist should be initialzed"
-        if mode == 'train':
-            assert not max_iter is None
-            n_train_imgs = ims_per_gpu * dist.get_world_size() * max_iter
-            sampler = RepeatedDistSampler(ds, n_train_imgs, shuffle=shuffle)
-        else:
-            sampler = torch.utils.data.distributed.DistributedSampler(
-                ds, shuffle=shuffle)
-        batchsampler = torch.utils.data.sampler.BatchSampler(
-            sampler, batchsize, drop_last=drop_last
-        )
-        dl = DataLoader(
-            ds,
-            batch_sampler=batchsampler,
-            num_workers=4,
-            pin_memory=True,
-        )
-    else:
-        dl = DataLoader(
-            ds,
-            batch_size=batchsize,
-            shuffle=shuffle,
-            drop_last=drop_last,
-            num_workers=4,
-            pin_memory=True,
-        )
+    dl = DataLoader(
+        ds,
+        batch_size=batchsize,
+        shuffle=shuffle,
+        drop_last=drop_last,
+        num_workers=1,
+        pin_memory=True,
+    )
     return dl
 
 

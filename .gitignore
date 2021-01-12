@@ -112,3 +112,7 @@ res/
 adj.md
 tensorrt/build/*
 
+# dataset
+datasets/*
+stored_models/
+hardnet_weights/

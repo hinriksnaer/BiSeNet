@@ -14,7 +14,7 @@ import numpy as np
 import lib.transform_cv2 as T
 from lib.sampler import RepeatedDistSampler
 
-
+from PIL import Image
 
 class BaseDataset(Dataset):
     '''
@@ -22,7 +22,7 @@ class BaseDataset(Dataset):
     def __init__(self, dataroot, annpath, trans_func=None, mode='train'):
         super(BaseDataset, self).__init__()
         assert mode in ('train', 'val', 'test')
-        self.mode = mode
+        self.mode = 'train'
         self.trans_func = trans_func
 
         self.lb_map = None
@@ -41,8 +41,10 @@ class BaseDataset(Dataset):
     def __getitem__(self, idx):
         impth, lbpth = self.img_paths[idx], self.lb_paths[idx]
         img, label = cv2.imread(impth)[:, :, ::-1], cv2.imread(lbpth, 0)
+
         if not self.lb_map is None:
             label = self.lb_map[label]
+
         im_lb = dict(im=img, lb=label)
         if not self.trans_func is None:
             im_lb = self.trans_func(im_lb)
@@ -82,7 +84,7 @@ class TransformationVal(object):
 if __name__ == "__main__":
     from tqdm import tqdm
     from torch.utils.data import DataLoader
-    ds = CityScapes('./data/', mode='val')
+    ds = CityScapes('./data/', mode='test')
     dl = DataLoader(ds,
                     batch_size = 4,
                     shuffle = True,

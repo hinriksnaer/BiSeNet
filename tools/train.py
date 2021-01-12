@@ -61,7 +61,7 @@ cfg = cfg_factory[args.model]
 
 
 def set_model():
-    net = model_factory[cfg.model_type](19)
+    net = model_factory[cfg.model_type](cfg.n_classes)
     if not args.finetune_from is None:
         net.load_state_dict(torch.load(args.finetune_from, map_location='cpu'))
     if cfg.use_sync_bn: net = set_syncbn(net)
@@ -135,7 +135,8 @@ def train():
 
     ## model
     net, criteria_pre, criteria_aux = set_model()
-
+    print(net)
+    print(f'n_parameters: {sum(p.numel() for p in net.parameters())}')
     ## optimizer
     optim = set_optimizer(net)
 
@@ -168,6 +169,7 @@ def train():
             optim.zero_grad()
             logits, *logits_aux = net(im)
             loss_pre = criteria_pre(logits, lb)
+
             loss_aux = [crit(lgt, lb) for crit, lgt in zip(criteria_aux, logits_aux)]
             loss = loss_pre + sum(loss_aux)
             if has_apex:
@@ -190,7 +192,7 @@ def train():
         lr = lr_schdr.get_lr()
         lr = sum(lr) / len(lr)
         print_log_msg(
-            it, cfg.max_iter, lr, time_meter, loss_meter,
+            i, cfg.max_iter, lr, time_meter, loss_meter,
             loss_pre_meter, loss_aux_meters)
 
         ##validation loop
@@ -223,10 +225,6 @@ def train():
             best_validation = validation_loss
             state = net.state_dict()
             torch.save(state,  osp.join(cfg.respth, 'best_validation.pth'))
-
-
-
-
 
     ## dump the final model and evaluate the result
     save_pth = osp.join(cfg.respth, 'model_final.pth')
